@@ -22,7 +22,14 @@
 
       devShells.default = pkgs.mkShell {
         name = "toylet-notes";
-        packages = [ pkgs.reading-desk ];
+        packages = with pkgs; [
+          reading-desk
+          (python3.withPackages (p: with p; [
+            matplotlib
+            numpy
+            pillow
+          ]))
+        ];
       };
     };
   };
