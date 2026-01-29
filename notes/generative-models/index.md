@@ -64,17 +64,17 @@ When the underlying distribution has a complex structure, it may require a very 
 
 # Variational Autoencoder (VAE) [id=vae]
 
-Sampling from a Gaussian is simple (as simple as calling `torch.normal`). One way to think about VAE is this: we want to find a mapping $f: \mathbb{R}^k \rightarrow \mathbb{R}^d$ from a $k$-dimensional latent space to the target space $\mathbb{R}^d$ where our data lives, such that when we push a standard Gaussian through $f$, the resulting distribution approximates $p(x)$:
+Sampling from a Gaussian is simple (as simple as calling `torch.normal`). One way to think about VAE is this: we want to find a mapping $f: \mathbb{R}^k \rightarrow \mathbb{R}^d$ from a $k$-dimensional latent space to the target space $\mathbb{R}^d$ where our data lives, such that when we push a standard Gaussian through $f$, the resulting distribution approximates $p(z)$:
 
 $$
-z \sim \mathcal{N}(0, I) \implies f(z) \sim p(x)
+x \sim \mathcal{N}(0, I) \implies f(x) \sim p(z)
 $$
 
-In other words, if we can find such an $f$, then sampling $x$ becomes straightforward: sample $z$ from a standard Gaussian, then transform it via $f$ to get a data point.
+In other words, if we can find such an $f$, then sampling $z$ becomes straightforward: sample $x$ from a standard Gaussian, then transform it via $f$ to get a data point.
 
 VAE proposes a way to learn such an $f$ using neural networks. The mathematical details can be found [here](https://www.breakds.org/the-intuitive-vae/).
 
-# Other Types of Distribution Modeling
+# Step-by-step Distribution Modeling [id=step-by-step-dist-model]
 
 As a human being, when I "sample" (i.e., paint) an image, it doesn't magically appear all at once—the process unfolds step by step. It's natural, then, that some distribution modeling methods also design their sampling process to be iterative. 
 
