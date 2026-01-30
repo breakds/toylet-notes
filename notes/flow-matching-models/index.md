@@ -141,6 +141,42 @@ $$
 
 This is remarkable: if we know the target data point $z$, the flow $u_t(\cdot|z)$ that transforms Gaussian noise to a point mass at $z$ has a simple analytical form—just a linear combination of $z$ and the current position $x$!
 
+# The Hunt of An Ideal Flow (In General)
+
+Let's reiterate that our goal is to transform Gaussian noise to the underlying data distribution $p(z)$. We are making good progress to find a flow that can transform Gaussian noise to a single data point $z$, which will turn out to be an excellent building block to our goal, as we will see in this section.
+
+## Getting lost going back home
+
+Remember the key idea for us to transform Gaussian noise to a single known data point $z$ is that the trajectory that reaches a point $x$ at time $t$ (will write in short as $X_t = x$) is **reversible**, which enables all $X_t$ to find their way home (back to $z$) - the [#section:flow] $u_t(x|z)$ will tell the direction. If instead $z$ is **sampled** from $p(z)$, standing at $X_t = x$, even though we already know that $X_t$ is reached by the **same noise-adding** procedure, we are unsure which $z$ it comes from since every possible $z$ sampled from $p(z)$ has the probability to raech $X_t = x$. Therefore we cannot decide which **direction** (flow) to use to "go back home".
+
+(TODO: A gif concatenated from two gifs. On the left an `X_t = x` that comes from a single $z$, they are connected with a line. An annimated arrow grow from $X_t$ to $z$, along the direction of the line, but the arrow does not need to actually reach $z$, because it is used to indicate the $u_t(x|z)$. On the right it is a similar one but with 4 different $z$s, $z_1$, $z_2$, $z_3$, $z_4$, and ellipsis to indicate there will be more. Each will have that line connecting to $X_t = x$ and their own animated arrow to indicate the direction of the flow $u_t(x|z_1)$, $u_t(x|z_2)$, $u_t(x|z_3)$, $u_t(x|z_4)$, probably also a sentence with question mark or something to say: "which way to go" or something similar).
+
+## Intuition: the (weighted) average direction
+
+Because we know that staring from a paricular $z$, the probability that it will reach $X_t = x$ is just $p_t(x|z)$. Thanks to Bayes's rule, we can answer 2 questions:
+
+1. What is the probability of such noise-adding process from a sampled $z \sim p(z)$ to reach $X_t = x$? 
+
+   This is equivalent to ask, what is the induced distribution of $X_t$? The straightforward answer (note that we have introduce a new notation $p_t(x)$ here) is
+   
+   $$
+   p_t(x) = \mathbb{P}(X_t = x) = \int_z p_t(x|z) p(z) \mathrm{d}z
+   $$
+   
+2. Standing at $X_t = t$, can we make an educated estimation on how likely which home ($z$) that I come from?
+
+   $$
+   \mathbb{P}(z | X_t = x) = \frac{\mathbb{P}(X_t = x, z)}{\mathbb{P}(X_t = x)} = \frac{p_t(x|z) p(z)}{p_t(x)}
+   $$
+
+With this, we can make an intuitive yet **VERY BOLD** move. If there is a 10% chance that my home is $z_A$, and another 20% chance that my home is $z_B$, ..., what happens if I just take the average direction that is the sum of 10% of the direction to $z_A$, 20% of the direction to $z_B$ and so on and so forth? Mathematically, this means that we take the weighted average direction
+
+$$
+u_t(x) = \int_z u_t(x|z) \mathbb{P}(z | X_t = x) \mathrm{d}z = \int_z u_t(x|z) \frac{p_t(x|z) p(z)}{p_t(x)} \mathrm{d}z
+$$
+
+It turns out that this intuitive move can actually get us back to home, well, **statistically**!
+
 # Training - Finding The Flow (Approximately) In Practice
 
 # The Gaussian Case
