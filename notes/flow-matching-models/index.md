@@ -11,7 +11,7 @@ The intuition behind [#section:vae] teaches us that sampling from a simple distr
 
 ## Can you denoise it?
 
-Below is an image of a cat. If we add some Gaussian white noise to it, it becomes a noisy cat image. It is not hard for you to "denoise" it in your mind and obtain a cat image that somewhat resembles the original, right? The denoised image in your mind may not be an exact copy of the original, but it would be close. This example illustrates that learning a model to denoise such images is not an unrealistic goal.
+Below is an image of a cat (credit to GPT-5.2). If we add some Gaussian white noise to it, it becomes a noisy cat image. It is not hard for you to "denoise" it in your mind and obtain a cat image that somewhat resembles the original, right? The denoised image in your mind may not be an exact copy of the original, but it would be close. This example illustrates that learning a model to denoise such images is not an unrealistic goal.
 
 ![Original and noisy cat](cat_denoise_example.png)
 
@@ -55,7 +55,9 @@ $$
 
 Note that since $u_t(\cdot)$ is a [#section:flow], it can move any starting point $x_0 \in \mathbb{R}^d$ to a corresponding endpoint $x_1 \in \mathbb{R}^d$. We don't yet have a way to find a good flow $u_t(\cdot)$, but we can describe the properties we want it to have.
 
-Since the flow $u_t(\cdot)$ is defined for all $x \in \mathbb{R}^d$, it can move any $x_0$ sampled from $\mathcal{N}(0, I)$ along a trajectory to some endpoint $x_1 = z$. As it does so, the flow "carries" the probability density from $\mathbf{X}_0$ to $\mathbf{X}_1$. We want this transformed distribution of $\mathbf{X}_1$ to match the data distribution $p(z)$—meaning $\mathbf{X}_1$ and $\mathbf{Z}$ become equivalent random variables. In other words, the flow transforms a distribution that is easy to sample into the target data distribution.
+## The View of Distribution Transformation
+
+Since the flow $u_t(\cdot)$ is defined for all $x \in \mathbb{R}^d$ and all $t \in [0, 1]$ it can move any $x_0$ sampled from $\mathcal{N}(0, I)$ along a trajectory to some endpoint $x_1 = z$. As it does so, the flow "carries" the probability density from $\mathbf{X}_0 \sim \mathcal{N}(0, I)$ to $\mathbf{X}_1$. We want this transformed distribution of $\mathbf{X}_1$ to match the data distribution $p(z)$—meaning $\mathbf{X}_1$ and $\mathbf{Z}$ become equivalent random variables. In other words, the flow transforms a distribution that is easy to sample into the target data distribution.
 
 If we find such a flow $u_t(\cdot)$, we can generate samples from the data distribution by:
 
@@ -65,7 +67,79 @@ If we find such a flow $u_t(\cdot)$, we can generate samples from the data distr
 
 The remaining million dollar question is then: how do we find such a good flow?
 
-# Finding The Flow (Analytically)
+# The Hunt of An Ideal Flow (Single Data Point Case) [id=single-data-point-flow]
+
+Let's start from a single data point $z \in \mathbb{R}^d$ (think of that cat image). We'll construct a simple "noise-adding" procedure and then derive the flow that reverses it.
+
+## The noise-adding procedure
+
+Define two **smooth monotonic** scheduling functions $\alpha_t$ and $\beta_t$ with boundary conditions:
+- $\alpha_0 = 0$, $\alpha_1 = 1$ (weight on data grows from 0 to 1)
+- $\beta_0 = 1$, $\beta_1 = 0$ (weight on noise shrinks from 1 to 0)
+
+Now sample a noise vector $\epsilon \sim \mathcal{N}(0, I)$. The "noise-added" image at time $t$ is the random variable:
+
+$$
+X_t = \alpha_t z + \beta_t \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)
+$$
+
+At $t=0$, we have $X_0 = \epsilon$, so $X_0$ and $\epsilon$ are equivalent random variables. This lets us rewrite the equation as:
+
+$$
+X_t = \alpha_t z + \beta_t X_0, \quad X_0 \sim \mathcal{N}(0, I)
+$$
+
+Concretely, this noise-adding procedure works by: (1) sampling an endpoint $X_0$ from Gaussian noise, then (2) linearly interpolating from $z$ toward $X_0$ using time-varying weights $\alpha_t$ and $\beta_t$.
+
+![Interpolation from z to noise](interpolation.gif)
+
+It is straightforward to show that 
+
+$$
+X_t \sim \mathcal{N}(\alpha_t z, \beta_t^2 I)
+$$
+
+We introduce the notation $p_t(x|z)$ for the **conditional** distribution of $X_t$ given a fixed data point $z$:
+
+$$
+p_t(x|z) = \mathcal{N}(\alpha_t z, \beta_t^2 I)
+$$
+
+This is the probability density of where we might land at time $t$ when following the noise-adding procedure from $z$. It satisfies the boundary conditions:
+
+$$
+\begin{aligned}
+p_0(x|z) &= \mathcal{N}(0, I) \\
+p_1(x|z) &= \delta_z(x)
+\end{aligned}
+$$
+
+Here $\delta_z(\cdot)$ is the [#section:dirac-delta-function], a distribution that puts all its density on a single point $z$.
+
+In other words, going from $t=1$ to $t=0$, we transform a point mass at $z$ into pure Gaussian noise.
+
+## The flow that guides $X_t$ back to $z$
+
+Recall that the noise-adding procedure linearly interpolates from $z$ toward a sampled noise endpoint $X_0$. This procedure is **reversible**: if we know both $X_t = x$ and the target $z$, we can recover which noise sample $X_0$ was used:
+
+$$
+X_0 = \frac{X_t - \alpha_t z}{\beta_t}
+$$
+
+
+We can construct a [#section:flow] that guides any $X_0 \sim \mathcal{N}(0, I)$ back to $X_1 = z$. The idea: take the time derivative of the interpolation formula. We use the notation $u_t(x|z)$ to emphasize this flow depends on knowing the target $z$:
+
+$$
+u_t(X_t|z) = \frac{\partial}{\partial t}X_t = \frac{\partial}{\partial t}(\alpha_t z + \beta_t X_0) = \dot{\alpha}_t z + \dot{\beta}_t X_0
+$$
+
+Substituting $X_0 = \frac{X_t - \alpha_t z}{\beta_t}$:
+
+$$
+u_t(X_t|z) = \dot{\alpha}_t z + \dot{\beta}_t \frac{X_t - \alpha_t z}{\beta_t} = \left( \dot{\alpha}_t - \frac{\alpha_t\dot{\beta}_t}{\beta_t} \right) z + \frac{\dot{\beta}_t}{\beta_t} X_t
+$$
+
+This is remarkable: if we know the target data point $z$, the flow $u_t(\cdot|z)$ that transforms Gaussian noise to a point mass at $z$ has a simple analytical form—just a linear combination of $z$ and the current position $x$!
 
 # Training - Finding The Flow (Approximately) In Practice
 

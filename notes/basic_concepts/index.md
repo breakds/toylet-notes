@@ -28,3 +28,19 @@ Below is an example flow defined by $u_t(x, y) = ((1-t)(-y), (1-t)(x))$. As $t$ 
 ![Flow at t=0.9](flow_t09.png)
 
 Physically, flows can model scenarios like fluid velocity that changes over time—imagine a whirlpool that gradually slows down.
+
+# Dirac Delta Function [id=dirac-delta-function]
+
+The Dirac delta function $\delta_z(x)$ represents a "distribution" that puts all its probability mass at a single point $z$. Intuitively, think of it as an infinitely tall, infinitely narrow spike centered at $z$, with total area 1.
+
+![Dirac delta function](dirac_delta.png)
+
+For any continuous function $f$:
+
+$$
+\int f(x) \delta_z(x) dx = f(z)
+$$
+
+This "sifting property" extracts the value of $f$ at the point $z$.
+
+While not a true function in the classical sense (it's a **distribution** or **generalized function**), $\delta_z$ is useful for describing probability distributions concentrated at a single point. If you sample from $\delta_z$, you always get exactly $z$—there's no randomness at all.
