@@ -116,9 +116,9 @@ $$
 
 Here $\delta_z(\cdot)$ is the [#section:dirac-delta-function], a distribution that puts all its density on a single point $z$.
 
-In other words, going from $t=1$ to $t=0$, we transform a point mass at $z$ into pure Gaussian noise.
+In other words, going from $t=1$ to $t=0$, we transform a point mass at $z$ into **pure Gaussian noise**.
 
-## The flow that guides $X_t$ back to $z$
+## The ideal conditional flow - the flow that guides $X_t$ back to $z$
 
 Recall that the noise-adding procedure linearly interpolates from $z$ toward a sampled noise endpoint $X_0$. This procedure is **reversible**: if we know both $X_t = x$ and the target $z$, we can recover which noise sample $X_0$ was used:
 
@@ -139,7 +139,37 @@ $$
 u_t(X_t|z) = \dot{\alpha}_t z + \dot{\beta}_t \frac{X_t - \alpha_t z}{\beta_t} = \left( \dot{\alpha}_t - \frac{\alpha_t\dot{\beta}_t}{\beta_t} \right) z + \frac{\dot{\beta}_t}{\beta_t} X_t
 $$
 
-This is remarkable: if we know the target data point $z$, the flow $u_t(\cdot|z)$ that transforms Gaussian noise to a point mass at $z$ has a simple analytical form—just a linear combination of $z$ and the current position $x$!
+This is remarkable: if we know the target data point $z$, the flow $u_t(\cdot|z)$ transforms $\mathcal{N}(0, I)$ into $p_t(x|z) = \mathcal{N}(\alpha_t z, \beta_t^2 I)$ at any time $t$. At $t=1$, this becomes the point mass $\delta_z$—we've arrived at our target! And the flow has a simple analytical form: just a linear combination of $z$ and the current position $x$.
+
+We call $u_t(x|z)$ defined above the **conditional ideal flow**, denoted $u_t^{\textrm{ideal}}(x|z)$.
+
+# Properties of The Ideal Conditional Flow [id=ideal-flow-properties]
+
+The ideal conditional flow $u_t^{\textrm{ideal}}(x|z)$ satisfies an important property: it evolves the probability density $p_t(x|z)$ according to the **continuity equation**. This will be a key tool when we generalize to multiple data points.
+
+## Deriving the continuity equation
+
+Consider how $p_t(x|z)$ changes over an infinitesimal time $h$. We can compute this change in two ways:
+
+**From the definition of $p_t(x|z)$**: By construction, the ideal flow transforms $p_t(x|z)$ to $p_{t+h}(x|z)$:
+
+$$
+\Delta p = p_{t+h}(x|z) - p_t(x|z)
+$$
+
+**From the flux perspective**: Treating probability density like mass density, [#section:flux-out-of-volume] tells us:
+
+$$
+\Delta p = p_{t+h}(x|z) - p_t(x|z) = -\nabla \cdot \big( p_t(x|z) \cdot u_t^{\textrm{ideal}}(x|z) \big) \cdot h
+$$
+
+Equating these and taking $\lim_{h \to 0}$, we obtain the **continuity equation**:
+
+$$
+\frac{\partial}{\partial t} p_t(x|z) = -\nabla \cdot \big( p_t(x|z) \cdot u_t^{\textrm{ideal}}(x|z) \big)
+$$
+
+This equation says: the rate of change of probability density at $x$ equals the negative divergence of the "probability flux" $p_t \cdot u_t^{\textrm{ideal}}$. Intuitively, probability flows like an incompressible fluid under the ideal flow.
 
 # The Hunt of An Ideal Flow (In General)
 
@@ -147,23 +177,34 @@ Let's reiterate that our goal is to transform Gaussian noise to the underlying d
 
 ## Getting lost going back home
 
-Remember the key idea for us to transform Gaussian noise to a single known data point $z$ is that the trajectory that reaches a point $x$ at time $t$ (will write in short as $X_t = x$) is **reversible**, which enables all $X_t$ to find their way home (back to $z$) - the [#section:flow] $u_t(x|z)$ will tell the direction. If instead $z$ is **sampled** from $p(z)$, standing at $X_t = x$, even though we already know that $X_t$ is reached by the **same noise-adding** procedure, we are unsure which $z$ it comes from since every possible $z$ sampled from $p(z)$ has the probability to raech $X_t = x$. Therefore we cannot decide which **direction** (flow) to use to "go back home".
+The key idea for transforming Gaussian noise to a single known data point $z$ is that the trajectory reaching $X_t = x$ is **reversible**—the flow $u_t(x|z)$ tells us the direction back to $z$.
 
-(TODO: A gif concatenated from two gifs. On the left an `X_t = x` that comes from a single $z$, they are connected with a line. An annimated arrow grow from $X_t$ to $z$, along the direction of the line, but the arrow does not need to actually reach $z$, because it is used to indicate the $u_t(x|z)$. On the right it is a similar one but with 4 different $z$s, $z_1$, $z_2$, $z_3$, $z_4$, and ellipsis to indicate there will be more. Each will have that line connecting to $X_t = x$ and their own animated arrow to indicate the direction of the flow $u_t(x|z_1)$, $u_t(x|z_2)$, $u_t(x|z_3)$, $u_t(x|z_4)$, probably also a sentence with question mark or something to say: "which way to go" or something similar).
+But what if $z$ is **sampled** from $p(z)$ rather than known? Standing at $X_t = x$, we don't know which $z$ we came from, since many different $z$ values could have led here. We're lost—which direction should we go?
+
+![Which way to go?](which_way.gif)
 
 ## Intuition: the (weighted) average direction
 
-Because we know that staring from a paricular $z$, the probability that it will reach $X_t = x$ is just $p_t(x|z)$. Thanks to Bayes's rule, we can answer 2 questions:
+Starting from a particular $z$, the probability of reaching $X_t = x$ is $p_t(x|z)$. Using Bayes's rule, we can answer two key questions:
 
-1. What is the probability of such noise-adding process from a sampled $z \sim p(z)$ to reach $X_t = x$? 
+1. What is the probability that the noise-adding process (starting from a sampled $z \sim p(z)$) reaches $X_t = x$?
 
-   This is equivalent to ask, what is the induced distribution of $X_t$? The straightforward answer (note that we have introduce a new notation $p_t(x)$ here) is
+   This is the **marginal distribution** of $X_t$. We introduce the notation $p_t(x)$:
    
    $$
    p_t(x) = \mathbb{P}(X_t = x) = \int_z p_t(x|z) p(z) \mathrm{d}z
    $$
    
-2. Standing at $X_t = t$, can we make an educated estimation on how likely which home ($z$) that I come from?
+   This generalizes to the case when $t = 0$ and $t = 1$ where (it depends on [#section:dirac-delta-function]):
+   
+   $$
+   \begin{aligned}
+   p_0(x) &= \int_z p_0(x|z) p(z) \mathrm{d}z = \int_z \mathcal{N}(x; 0, I) p(z) \mathrm{d}z = \mathcal{N}(x; 0, I) \\
+   p_1(x) &= \int_z p_1(x|z) p(z) \mathrm{d}z = \int_z \delta_z(x) p(z) \mathrm{d}z = p(x)
+   \end{aligned}
+   $$
+   
+2. Standing at $X_t = x$, can we estimate which home ($z$) we likely came from?
 
    $$
    \mathbb{P}(z | X_t = x) = \frac{\mathbb{P}(X_t = x, z)}{\mathbb{P}(X_t = x)} = \frac{p_t(x|z) p(z)}{p_t(x)}
@@ -172,10 +213,53 @@ Because we know that staring from a paricular $z$, the probability that it will 
 With this, we can make an intuitive yet **VERY BOLD** move. If there is a 10% chance that my home is $z_A$, and another 20% chance that my home is $z_B$, ..., what happens if I just take the average direction that is the sum of 10% of the direction to $z_A$, 20% of the direction to $z_B$ and so on and so forth? Mathematically, this means that we take the weighted average direction
 
 $$
-u_t(x) = \int_z u_t(x|z) \mathbb{P}(z | X_t = x) \mathrm{d}z = \int_z u_t(x|z) \frac{p_t(x|z) p(z)}{p_t(x)} \mathrm{d}z
+u^{\textrm{ideal}}_t(x) = \int_z u^{\textrm{ideal}}_t(x|z) \mathbb{P}(z | X_t = x) \mathrm{d}z = \int_z u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z) p(z)}{p_t(x)} \mathrm{d}z
 $$
 
 It turns out that this intuitive move can actually get us back to home, well, **statistically**!
+
+## The intuitive "proof"
+
+The bold claim above states: following the weighted average direction $u_t^{\textrm{ideal}}(x)$ transforms $X_0 \sim \mathcal{N}(0, I)$ to $X_1 \sim p(x)$. While it can't move any single point $X_t = x$ to its true origin $z$ (since that's unknown), looking at the distribution as a whole, the transformation works!
+
+We'll prove a stronger statement: $u_t^{\textrm{ideal}}(x)$ transforms the distribution to $p_t(x)$ at any time $t$, with $t=1$ (where $p_1 = p(z)$) as a special case. This stronger version lets us use induction.
+
+**The induction step**: Assume at time $t$ the distribution is $p_t(x)$. After following $u_t^{\textrm{ideal}}(x)$ for an infinitesimal time $h$, what is the new distribution?
+
+By [#section:flux-out-of-volume], the change in probability density is:
+
+$$
+\begin{aligned}
+\Delta p &= -\nabla \cdot \big( p_t(x) \cdot u_t^{\textrm{ideal}}(x) \big) \cdot h \\[6pt]
+&= -\nabla \cdot \left( p_t(x) \int_z u^{\textrm{ideal}}_t(x|z)\frac{p_t(x|z)p(z)}{p_t(x)} \mathrm{d}z \right) \cdot h \\[6pt]
+&= -\nabla \cdot \left( \int_z u^{\textrm{ideal}}_t(x|z) \cdot p_t(x|z) \cdot p(z) \, \mathrm{d}z \right) \cdot h \\[6pt]
+&= -\int_z \nabla \cdot \big[ u^{\textrm{ideal}}_t(x|z) \cdot p_t(x|z) \big] \cdot h \cdot p(z) \, \mathrm{d}z
+\end{aligned}
+$$
+
+Now we use [#section:ideal-flow-properties]. The continuity equation tells us:
+
+$$
+\nabla \cdot \big[ u^{\textrm{ideal}}_t(x|z) \cdot p_t(x|z) \big] \cdot h = p_{t+h}(x|z) - p_t(x|z)
+$$
+
+Substituting back:
+
+$$
+\begin{aligned}
+\Delta p &= \left( \int_z \big[ p_{t+h}(x|z) - p_t(x|z) \big] \cdot p(z) \, \mathrm{d}z \right) \\[6pt]
+&= \int_z p_{t+h}(x|z) \cdot p(z) \, \mathrm{d}z - \int_z p_t(x|z) \cdot p(z) \, \mathrm{d}z \\[6pt]
+&= p_{t+h}(x) - p_t(x)
+\end{aligned}
+$$
+
+This is an excellent result! The new distribution is:
+
+$$
+p_t(x) + \Delta p = p_t(x) + p_{t+h}(x) - p_t(x) = p_{t+h}(x)
+$$
+
+Since this holds for all $x$, following $u_t^{\textrm{ideal}}(x)$ evolves the distribution exactly along $p_t(x)$. We call this the **ideal marginal flow**—it no longer conditions on any specific $z$.
 
 # Training - Finding The Flow (Approximately) In Practice
 
