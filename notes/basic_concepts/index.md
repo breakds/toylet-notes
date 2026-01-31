@@ -29,6 +29,42 @@ Below is an example flow defined by $u_t(x, y) = ((1-t)(-y), (1-t)(x))$. As $t$ 
 
 Physically, flows can model scenarios like fluid velocity that changes over time—imagine a whirlpool that gradually slows down.
 
+# Euler Method (Simulating a Flow) [id=euler-method]
+
+Given a [#section:flow] $u_t(x)$, how do we compute where a particle starting at $x_0$ ends up after following the flow from $t=0$ to $t=1$?
+
+The exact answer requires solving the ODE:
+
+$$
+\frac{dx}{dt} = u_t(x), \quad x(0) = x_0
+$$
+
+The **Euler method** approximates this by taking small discrete steps. The idea is simple: at each moment, pretend the velocity is constant for a small time step $h$, then jump in that direction.
+
+## The algorithm
+
+Starting from $x_0$ at $t=0$, repeat until $t=1$:
+
+$$
+x_{t+h} \leftarrow x_t + u_t(x_t) \cdot h
+$$
+
+In other words: look at the current velocity $u_t(x_t)$, move in that direction for time $h$, then re-evaluate.
+
+## Visualization
+
+The gif below shows Euler's method in action. The blue curve is the true trajectory; the red steps show the Euler approximation. With smaller step sizes, the approximation improves.
+
+![Euler method demonstration](euler_method.gif)
+
+## Trade-off
+
+- **Smaller $h$**: More accurate, but requires more computation steps
+- **Larger $h$**: Faster, but the approximation drifts from the true path
+
+In practice, more sophisticated methods (Runge-Kutta, adaptive step sizes) are often used, but Euler's method captures the core idea.
+
+
 # The Divergence Operator [id=divergence-operator]
 
 The divergence of a [#section:vector-field] $v$ measures how much the field "spreads out" or "converges" at each point. Think of $v$ as describing fluid velocity:

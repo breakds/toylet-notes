@@ -261,9 +261,146 @@ $$
 
 Since this holds for all $x$, following $u_t^{\textrm{ideal}}(x)$ evolves the distribution exactly along $p_t(x)$. We call this the **ideal marginal flow**—it no longer conditions on any specific $z$.
 
+$$
+u^{\textrm{ideal}}_t(x) = \int_z u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z) p(z)}{p_t(x)} \mathrm{d}z = \mathbb{E}_{z \sim p(z)} \left[ u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z)}{p_t(x)} \right]
+$$
+
 # Training - Finding The Flow (Approximately) In Practice
 
-# The Gaussian Case
+We have one big question left: how do we train a neural network to approximate the ideal marginal flow $u^{\textrm{ideal}}_t(x)$?
+
+If we can approximate it with a neural network $u^{\theta}(x, t)$, then we can use the [#section:euler-method] to simulate trajectories from noise $\mathcal{N}(0, I)$ to samples from $p(z)$.
+
+Let's just go with the very typical approach, defining the loss using L2 error:
+
+$$
+L(\theta) = \mathbb{E}_{t \sim \textrm{uniform}[0, 1], z \sim p(z), x \sim p_t(x|z)} \big[
+ \lVert u^\theta(x, t) - u^{\textrm{ideal}}_t(x) \rVert^2
+\big]
+$$
+
+Don't be scared of the $\mathbb{E}$ here, since in machine learning, this can just read "sample this way to get batches for training". The above therefore translates to the following pseudo `pytorch` code of training procedure:
+
+```python
+for z in data_loader:                         # z ~ p(z), shape: [batch, d]
+    t = torch.rand(batch_size)                # t ~ uniform[0, 1]
+
+    # Sample x ~ p_t(x|z) = N(alpha_t * z, beta_t^2 * I)
+    epsilon = torch.randn_like(z)             # epsilon ~ N(0, I)
+    x = alpha(t) * z + beta(t) * epsilon
+
+    # Compute target - but how?
+    target = compute_u_ideal(x, t)            # We don't know how to implement this yet!
+
+    # Compute loss and update
+    pred = model(x, t)                        # u_theta(x, t)
+    loss = ((pred - target) ** 2).mean()
+    loss.backward()
+    optimizer.step()
+```
+
+## The challenge
+
+Take a look at the formula
+
+$$
+u^{\textrm{ideal}}_t(x) = \mathbb{E}_{z \sim p(z)} \left[ u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z)}{p_t(x)}\right]
+$$
+
+There are many components we don't know how to compute: $p(z)$ is unknown (that's our target!), and the expectation (integral) is intractable. However, we know exactly how to compute $u^{\textrm{ideal}}_t(x|z)$ from [#section:single-data-point-flow]:
+
+$$
+u^{\textrm{ideal}}_t(x|z) = \dot{\alpha}_t z + \dot{\beta}_t \frac{x - \alpha_t z}{\beta_t} = \left( \dot{\alpha}_t - \frac{\alpha_t\dot{\beta}_t}{\beta_t} \right) z + \frac{\dot{\beta}_t}{\beta_t} x
+$$
+
+Being able to compute $u^{\textrm{ideal}}_t(x|z)$ turns out to be crucial to our solution.
+
+## The solution
+
+Let's take another look at the loss function and try to transform it. Note that 
+
+1. We use $C$ to denote **constant that we do not care about**. 
+2. Given $t$, sampling from $p_t(x)$ is equivalent to first sampling $z \sim p(z)$ and then sampling $x \sim p_t(x|z)$.
+
+$$
+\begin{aligned}
+L(\theta) &= \mathbb{E}_{t \sim \textrm{uniform}[0, 1], z \sim p(z), x \sim p_t(x|z)} \big[
+ \lVert u^\theta(x, t) - u^{\textrm{ideal}}_t(x) \rVert^2 \big] \\
+ 
+ &= \mathbb{E}_{t, z \sim p(z), x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 - 2u^\theta(x, t)^\intercal u^{\textrm{ideal}}_t(x)  + u^{\textrm{ideal}}_t(x)^2
+\big] \\
+ &= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 - 2u^\theta(x, t)^\intercal u^{\textrm{ideal}}_t(x) \big] + C \\
+  
+ &= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, z, x \sim p_t(x|z)}\big[u^\theta(x, t)^\intercal u^{\textrm{ideal}}_t(x) \big] + C \\
+  
+ &= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, x \sim p_t(x)}\big[u^\theta(x, t)^\intercal u^{\textrm{ideal}}_t(x) \big] + C
+\end{aligned}
+$$
+
+Plug in
+
+$$
+u^{\textrm{ideal}}_t(x) = \mathbb{E}_{z \sim p(z)} \left[ u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z)}{p_t(x)}\right]
+$$
+
+We have
+
+$$
+\begin{aligned}
+L(\theta) &= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, x \sim p_t(x)}\left[ u^\theta(x, t)^\intercal 
+  \mathbb{E}_{z \sim p(z)} \left[ u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z)}{p_t(x)}\right]
+  \right] + C  \\
+
+&= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, x \sim p_t(x), z \sim p(z)}\left[ u^\theta(x, t)^\intercal 
+  u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z)}{p_t(x)}
+  \right] + C  \\
+
+&= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, z \sim p(z)}\left[ \int_x u^\theta(x, t)^\intercal 
+  u^{\textrm{ideal}}_t(x|z) \frac{p_t(x|z)}{p_t(x)} p_t(x) \mathrm{d}x
+  \right] + C \\
+  
+&= \mathbb{E}_{t, z, x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, z \sim p(z)}\left[ \int_x u^\theta(x, t)^\intercal 
+  u^{\textrm{ideal}}_t(x|z) p_t(x|z) \mathrm{d}x
+  \right] + C \\
+  
+&= \mathbb{E}_{t, z \sim p(z), x \sim p_t(x|z)} \big[
+  u^\theta(x, t)^2 \big] - 2 \mathbb{E}_{t, z \sim p(z), x \sim p_t(x|z)}\left[ u^\theta(x, t)^\intercal  u^{\textrm{ideal}}_t(x|z)
+  \right] + C \\
+  
+&= \mathbb{E}_{t \sim \textrm{uniform}[0, 1], z \sim p(z), x \sim p_t(x|z)} \left[
+  u^\theta(x, t)^2  - 2 u^\theta(x, t)^\intercal  u^{\textrm{ideal}}_t(x|z) 
+  \right] + C \\
+
+&= \mathbb{E}_{t \sim \textrm{uniform}[0, 1], z \sim p(z), x \sim p_t(x|z)} \left[
+    \lVert u^\theta(x, t) - u^{\textrm{ideal}}_t(x|z) \rVert^2
+  \right] + C
+  
+\end{aligned}
+$$
+
+This is an elegant result! Minimizing the original $L(\theta)$ is equivalent to minimizing something we *can* compute—simply replace $u^{\textrm{ideal}}_t(x)$ with $u^{\textrm{ideal}}_t(x|z)$:
+
+$$
+\begin{aligned}
+\hat{L}(\theta) &= \mathbb{E}_{t \sim \textrm{uniform}[0, 1], z \sim p(z), x \sim p_t(x|z)} \left[
+    \lVert u^\theta(x, t) - u^{\textrm{ideal}}_t(x|z) \rVert^2
+  \right] \\
+&= \mathbb{E}_{t, z, x \sim p_t(x|z)} \left[
+    \left\lVert u^\theta(x, t) - \left( \dot{\alpha}_t - \frac{\alpha_t\dot{\beta}_t}{\beta_t} \right) z - \frac{\dot{\beta}_t}{\beta_t} x \right\rVert^2
+  \right]   
+\end{aligned}
+$$
+
 
 # References
+
+Huge acknowledgement to [the lecture notes](https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf) by Peter Holderrieth and Ezra Erives. In my opinion, these are among the best notes for understanding a unified view of diffusion models. This note is my digestion of what they taught.
 
