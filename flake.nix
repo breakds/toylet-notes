@@ -14,12 +14,9 @@
   outputs = { flake-parts, ... }@inputs: flake-parts.lib.mkFlake { inherit inputs; } {
     systems = [ "x86_64-linux" "aarch64-darwin" ];
 
-    perSystem = { system, pkgs, ... }: {
-      _module.args.pkgs = import inputs.nixpkgs {
-        inherit system;
-        overlays = [ inputs.reading-desk.overlays.default ];
-      };
+    imports = [ ./nix/release.nix ];
 
+    perSystem = { system, pkgs, ... }: {
       devShells.default = pkgs.mkShell {
         name = "toylet-notes";
         packages = with pkgs; [
