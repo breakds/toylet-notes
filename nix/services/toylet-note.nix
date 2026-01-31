@@ -1,14 +1,14 @@
 { config, lib, pkgs, ... }:
 
 let
-  cfg = config.services.toylet-note;
+  cfg = config.services.toylet-notes;
 
   notesPackage = pkgs.runCommand "toylet-notes-content" {} ''
     mkdir -p $out
     cp -r ${../../notes} $out/notes
   '';
 in {
-  options.services.toylet-note = {
+  options.services.toylet-notes = {
     enable = lib.mkEnableOption "Toylet Notes server";
 
     package = lib.mkOption {
@@ -59,7 +59,7 @@ in {
         Type = "simple";
         ExecStart = lib.escapeShellArgs [
           "${cfg.package}/bin/reading-desk"
-          "--content-dir" "${notesPackage}/notes"
+          "--content-dir" "${notesPackage}"
           "--port" (toString cfg.port)
           "--title" cfg.title
           "--watch" "false"
